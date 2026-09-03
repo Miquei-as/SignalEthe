@@ -1,61 +1,286 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <title>Controle do Sinal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle do Sinal - ESP32</title>
     <style>
-        body { font-family: Arial; margin: 40px; }
-        button { padding: 20px; font-size: 24px; margin: 10px; }
-        .panic { background-color: red; color: white; border: none; border-radius: 10px; }
-        .normal { background-color: green; color: white; border: none; border-radius: 10px; }
-        #status { font-weight: bold; margin-top: 20px; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #1a1a2e;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #6c757d;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+        .ip-display {
+            background: #e9ecef;
+            border-radius: 10px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 16px;
+            margin-bottom: 25px;
+            word-break: break-all;
+        }
+        .status-box {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-left: 5px solid #28a745;
+            transition: border-color 0.3s;
+        }
+        .status-box.panic {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .status-label {
+            font-weight: 600;
+            font-size: 16px;
+            color: #343a40;
+        }
+        .status-text {
+            font-weight: 700;
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        .status-text.normal {
+            color: #28a745;
+        }
+        .status-text.panic {
+            color: #dc3545;
+        }
+        .btn {
+            display: inline-block;
+            padding: 16px 32px;
+            font-size: 22px;
+            font-weight: 700;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-panic {
+            background: #dc3545;
+            color: white;
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
+        }
+        .btn-panic:hover {
+            background: #c82333;
+            transform: scale(1.02);
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.6);
+        }
+        .btn-panic.active {
+            background: #28a745;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+        }
+        .btn-panic.active:hover {
+            background: #218838;
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.6);
+        }
+        .btn:active {
+            transform: scale(0.96);
+        }
+        .feedback {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #6c757d;
+            min-height: 24px;
+        }
+        .feedback.error {
+            color: #dc3545;
+        }
+        .feedback.success {
+            color: #28a745;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #adb5bd;
+        }
+        @media (max-width: 480px) {
+            .card {
+                padding: 20px;
+            }
+            .btn {
+                font-size: 18px;
+                padding: 14px 20px;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>🔔 Controle do Sinal</h1>
-    <p>IP do ESP32: <span id="ipDisplay">Carregando...</span></p>
-    <button id="btnPanic" class="panic">🚨 Ativar Pânico</button>
-    <div id="status">Status: Normal</div>
+    <div class="card">
+        <h1>🔔 Controle do Sinal</h1>
+        <p class="subtitle">ESP32 - Sistema de horários</p>
+
+        <div class="ip-display">
+            🌐 IP: <span id="ipDisplay">Carregando...</span>
+        </div>
+
+        <div class="status-box" id="statusBox">
+            <div class="status-label">Status do sistema</div>
+            <div class="status-text normal" id="statusText">✅ Normal</div>
+        </div>
+
+        <button class="btn btn-panic" id="btnPanic">🚨 Ativar Pânico</button>
+
+        <div class="feedback" id="feedback">Aguardando ação...</div>
+
+        <div class="footer">v1.0 • Clique no botão para ativar/desativar o modo pânico</div>
+    </div>
 
     <script>
-        // === CONFIGURAÇÃO ===
-        // Substitua pelo IP do seu ESP32 (obtido no serial)
-        const ESP_IP = '192.168.50.148';   // ALTERE AQUI!
+        // ============================================================
+        //  CONFIGURAÇÃO – ALTERE AQUI O IP DO SEU ESP32
+        // ============================================================
+        const ESP_IP = '192.168.50.148';   // <-- SUBSTITUA PELO IP DO SEU ESP32
 
-        const btn = document.getElementById('btnPanic');
-        const statusDiv = document.getElementById('status');
+        // ============================================================
+        //  ELEMENTOS DA PÁGINA
+        // ============================================================
+        const btnPanic = document.getElementById('btnPanic');
+        const statusText = document.getElementById('statusText');
+        const statusBox = document.getElementById('statusBox');
+        const feedback = document.getElementById('feedback');
         const ipDisplay = document.getElementById('ipDisplay');
-
-        ipDisplay.textContent = ESP_IP;
 
         let panicActive = false;
 
-        btn.addEventListener('click', function() {
-            panicActive = !panicActive;
-            const state = panicActive ? 1 : 0;
-            const url = `http://${ESP_IP}/panic?state=${state}`;
-            fetch(url)
-                .then(response => response.text())
-                .then(data => {
-                    if (panicActive) {
-                        btn.textContent = '🛑 Desativar Pânico';
-                        btn.className = 'normal';
-                        statusDiv.textContent = 'Status: PÂNICO ATIVO!';
-                        statusDiv.style.color = 'red';
-                    } else {
-                        btn.textContent = '🚨 Ativar Pânico';
-                        btn.className = 'panic';
-                        statusDiv.textContent = 'Status: Normal';
-                        statusDiv.style.color = 'green';
-                    }
-                })
-                .catch(err => {
-                    alert('Erro ao comunicar com o ESP32. Verifique o IP e a conexão.');
-                    console.error(err);
-                    // Reverte estado
-                    panicActive = !panicActive;
+        // Exibe o IP na página
+        ipDisplay.textContent = ESP_IP;
+
+        // ============================================================
+        //  FUNÇÃO PARA ENVIAR COMANDO AO ESP32
+        // ============================================================
+        async function enviarComando(estado) {
+            const url = `http://${ESP_IP}/panic?state=${estado}`;
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    timeout: 3000   // 3 segundos de timeout (navegador)
                 });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const texto = await response.text();
+                return { sucesso: true, resposta: texto };
+            } catch (error) {
+                console.error('Erro na requisição:', error);
+                return { sucesso: false, erro: error.message };
+            }
+        }
+
+        // ============================================================
+        //  ATUALIZA A INTERFACE (botão, status, feedback)
+        // ============================================================
+        function atualizarInterface(panicState) {
+            panicActive = panicState;
+            if (panicActive) {
+                btnPanic.textContent = '🛑 Desativar Pânico';
+                btnPanic.classList.add('active');
+                statusText.textContent = '🚨 PÂNICO ATIVO';
+                statusText.className = 'status-text panic';
+                statusBox.classList.add('panic');
+                feedback.textContent = '⚠️ Modo pânico ativado – relé alternando a cada 1s.';
+                feedback.className = 'feedback';
+            } else {
+                btnPanic.textContent = '🚨 Ativar Pânico';
+                btnPanic.classList.remove('active');
+                statusText.textContent = '✅ Normal';
+                statusText.className = 'status-text normal';
+                statusBox.classList.remove('panic');
+                feedback.textContent = '✅ Modo normal – horários programados ativos.';
+                feedback.className = 'feedback success';
+            }
+        }
+
+        // ============================================================
+        //  EVENTO DO BOTÃO (alterna pânico)
+        // ============================================================
+        btnPanic.addEventListener('click', async function() {
+            const novoEstado = !panicActive;   // alterna
+            const estadoInt = novoEstado ? 1 : 0;
+
+            // Feedback imediato (otimista) para não deixar o usuário esperando
+            feedback.textContent = '⏳ Enviando comando...';
+            feedback.className = 'feedback';
+
+            const resultado = await enviarComando(estadoInt);
+
+            if (resultado.sucesso) {
+                // Confirma o estado no ESP (pode ser diferente se houve erro, mas confiamos)
+                atualizarInterface(novoEstado);
+                feedback.textContent = `✅ Comando enviado: ${novoEstado ? 'Pânico ativado' : 'Pânico desativado'}`;
+                feedback.className = 'feedback success';
+            } else {
+                // Falha – reverte o estado visual (volta ao que era antes)
+                feedback.textContent = `❌ Erro ao comunicar com ESP32: ${resultado.erro}. Verifique o IP e a conexão.`;
+                feedback.className = 'feedback error';
+                // Não altera o estado visual – mantém como estava (pois o ESP pode não ter recebido)
+                // Mas se quisermos, podemos reverter o botão:
+                // (descomente a linha abaixo se quiser reverter)
+                // atualizarInterface(panicActive);
+                console.warn('Falha na comunicação – estado não alterado no ESP.');
+            }
         });
+
+        // ============================================================
+        //  (OPCIONAL) TESTE DE CONEXÃO AO CARREGAR A PÁGINA
+        // ============================================================
+        async function testarConexao() {
+            try {
+                const response = await fetch(`http://${ESP_IP}/panic?state=0`, {
+                    method: 'GET',
+                    timeout: 2000
+                });
+                if (response.ok) {
+                    feedback.textContent = '✅ Conexão com ESP32 estabelecida.';
+                    feedback.className = 'feedback success';
+                } else {
+                    feedback.textContent = '⚠️ ESP32 respondeu, mas com status inesperado.';
+                    feedback.className = 'feedback error';
+                }
+            } catch (e) {
+                feedback.textContent = '⚠️ Não foi possível contatar o ESP32. Verifique o IP e se ele está ligado.';
+                feedback.className = 'feedback error';
+            }
+        }
+
+        // Descomente a linha abaixo se quiser testar a conexão ao carregar a página
+        // testarConexao();
+
+        // Inicializa interface (estado normal)
+        atualizarInterface(false);
     </script>
 </body>
 </html>
