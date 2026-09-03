@@ -1,141 +1,61 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciador de Horários - Sinal</title>
+    <title>Controle do Sinal</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 20px; }
-        textarea { width: 100%; height: 300px; font-family: monospace; }
-        input[type="password"] { width: 300px; }
-        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
-        button { padding: 8px 16px; cursor: pointer; }
+        body { font-family: Arial; margin: 40px; }
+        button { padding: 20px; font-size: 24px; margin: 10px; }
+        .panic { background-color: red; color: white; border: none; border-radius: 10px; }
+        .normal { background-color: green; color: white; border: none; border-radius: 10px; }
+        #status { font-weight: bold; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>📅 Gerenciador de Horários do Sinal</h1>
-    <p>Digite seu <strong>Token de Acesso Pessoal</strong> do GitHub (com permissão <code>repo</code>).</p>
-    <input type="password" id="token" placeholder="Seu token GitHub" style="width: 400px;">
-    <button id="carregarBtn">Carregar horários</button>
-    <hr>
-    <h3>Conteúdo do horarios.txt:</h3>
-    <textarea id="conteudo" placeholder="Carregue os horários para editar..."></textarea>
-    <br><br>
-    <button id="salvarBtn">💾 Salvar no GitHub</button>
-    <div id="status" class="status"></div>
+    <h1>🔔 Controle do Sinal</h1>
+    <p>IP do ESP32: <span id="ipDisplay">Carregando...</span></p>
+    <button id="btnPanic" class="panic">🚨 Ativar Pânico</button>
+    <div id="status">Status: Normal</div>
 
     <script>
-        // ===== CONFIGURAÇÕES =====
-        // Substitua pelos dados do SEU repositório
-        const REPO_OWNER = 'seu-usuario';
-        const REPO_NAME = 'seu-repositorio';
-        const FILE_PATH = 'horarios.txt';
-        const BRANCH = 'main';
+        // === CONFIGURAÇÃO ===
+        // Substitua pelo IP do seu ESP32 (obtido no serial)
+        const ESP_IP = '192.168.50.148';   // ALTERE AQUI!
 
-        // URL para leitura (raw)
-        const RAW_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/${FILE_PATH}`;
-        // URL da API para escrita
-        const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
-
-        // Elementos
-        const tokenInput = document.getElementById('token');
-        const conteudoTextarea = document.getElementById('conteudo');
+        const btn = document.getElementById('btnPanic');
         const statusDiv = document.getElementById('status');
-        const carregarBtn = document.getElementById('carregarBtn');
-        const salvarBtn = document.getElementById('salvarBtn');
+        const ipDisplay = document.getElementById('ipDisplay');
 
-        // ===== FUNÇÕES AUXILIARES =====
-        function setStatus(msg, type = '') {
-            statusDiv.textContent = msg;
-            statusDiv.className = 'status ' + type;
-        }
+        ipDisplay.textContent = ESP_IP;
 
-        // ===== CARREGAR HORÁRIOS ATUAIS =====
-        async function carregarHorarios() {
-            try {
-                setStatus('Carregando...', '');
-                const response = await fetch(RAW_URL);
-                if (!response.ok) throw new Error(`Erro ${response.status}: ${response.statusText}`);
-                const texto = await response.text();
-                conteudoTextarea.value = texto;
-                setStatus('✅ Horários carregados com sucesso!', 'success');
-            } catch (err) {
-                setStatus('❌ Erro ao carregar: ' + err.message, 'error');
-            }
-        }
+        let panicActive = false;
 
-        // ===== SALVAR HORÁRIOS NO GITHUB =====
-        async function salvarHorarios() {
-            const token = tokenInput.value.trim();
-            if (!token) {
-                setStatus('❌ Digite seu token de acesso antes de salvar.', 'error');
-                return;
-            }
-
-            const novoConteudo = conteudoTextarea.value;
-            if (!novoConteudo.trim()) {
-                setStatus('❌ O conteúdo não pode estar vazio.', 'error');
-                return;
-            }
-
-            try {
-                setStatus('Salvando...', '');
-                
-                // 1. Obter o SHA atual do arquivo (necessário para atualizar)
-                const shaResponse = await fetch(API_URL, {
-                    headers: {
-                        'Authorization': `token ${token}`,
-                        'Accept': 'application/vnd.github.v3+json'
+        btn.addEventListener('click', function() {
+            panicActive = !panicActive;
+            const state = panicActive ? 1 : 0;
+            const url = `http://${ESP_IP}/panic?state=${state}`;
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    if (panicActive) {
+                        btn.textContent = '🛑 Desativar Pânico';
+                        btn.className = 'normal';
+                        statusDiv.textContent = 'Status: PÂNICO ATIVO!';
+                        statusDiv.style.color = 'red';
+                    } else {
+                        btn.textContent = '🚨 Ativar Pânico';
+                        btn.className = 'panic';
+                        statusDiv.textContent = 'Status: Normal';
+                        statusDiv.style.color = 'green';
                     }
+                })
+                .catch(err => {
+                    alert('Erro ao comunicar com o ESP32. Verifique o IP e a conexão.');
+                    console.error(err);
+                    // Reverte estado
+                    panicActive = !panicActive;
                 });
-                if (!shaResponse.ok) {
-                    if (shaResponse.status === 401) throw new Error('Token inválido ou sem permissão.');
-                    throw new Error(`Erro ao obter SHA: ${shaResponse.status}`);
-                }
-                const shaData = await shaResponse.json();
-                const sha = shaData.sha;
-
-                // 2. Codificar o conteúdo em Base64 (GitHub exige)
-                const encoded = btoa(unescape(encodeURIComponent(novoConteudo)));
-
-                // 3. Montar o payload da atualização
-                const payload = {
-                    message: `Atualização de horários via interface web - ${new Date().toLocaleString()}`,
-                    content: encoded,
-                    sha: sha,
-                    branch: BRANCH
-                };
-
-                // 4. Enviar PUT
-                const putResponse = await fetch(API_URL, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${token}`,
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!putResponse.ok) {
-                    const errorData = await putResponse.json();
-                    throw new Error(`Erro ${putResponse.status}: ${errorData.message || 'Falha ao salvar'}`);
-                }
-
-                setStatus('✅ Arquivo atualizado com sucesso no GitHub!', 'success');
-            } catch (err) {
-                setStatus('❌ Erro ao salvar: ' + err.message, 'error');
-            }
-        }
-
-        // ===== EVENTOS =====
-        carregarBtn.addEventListener('click', carregarHorarios);
-        salvarBtn.addEventListener('click', salvarHorarios);
-
-        // Carregar automaticamente ao abrir a página (se quiser)
-        // window.addEventListener('load', carregarHorarios);
+        });
     </script>
 </body>
 </html>
